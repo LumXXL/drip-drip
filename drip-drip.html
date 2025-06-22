@@ -115,13 +115,36 @@
         }
 
         .basin {
-            width: 400px;
-            height: 400px;
+            width: 480px;
+            height: 480px;
             border: 2px solid #fff;
             border-radius: 50%;
             position: relative;
             background: radial-gradient(circle, rgba(0, 150, 255, 0.1) 0%, rgba(0, 50, 150, 0.05) 70%, transparent 100%);
             cursor: crosshair;
+            overflow: hidden;
+        }
+
+        .basin-ripple {
+            position: absolute;
+            border: 1px solid white;
+            border-radius: 50%;
+            pointer-events: none;
+            width: 2px;
+            height: 2px;
+            transform: translate(-50%, -50%);
+            animation: basinRipple 1.2s ease-out forwards;
+            background: transparent;
+        }
+
+        @keyframes basinRipple {
+            from {
+                transform: translate(-50%, -50%) scale(1);
+            }
+            to {
+                transform: translate(-50%, -50%) scale(150);
+                opacity: 0;
+            }
         }
 
         .droplet {
@@ -439,7 +462,7 @@
 
             initBasin() {
                 this.basin = document.getElementById('basin');
-                this.basinCenter = { x: 200, y: 200 }; // Half of 400px basin
+                this.basinCenter = { x: 240, y: 240 }; // Half of 480px basin
             }
 
             initControls() {
@@ -652,7 +675,7 @@
                     
                     // Constrain to basin circle
                     const distance = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
-                    const maxDistance = 190; // Basin radius minus droplet size
+                    const maxDistance = 228; // Basin radius minus droplet size (240 - 12)
                     
                     if (distance > maxDistance) {
                         const angle = Math.atan2(mouseY, mouseX);
@@ -867,6 +890,7 @@
                     if (this.shouldDropletPlay(droplet, position)) {
                         this.playDropletSound(droplet);
                         this.animateDroplet(droplet);
+                        this.createBasinRipple(droplet);
                     }
                 });
             }
@@ -968,6 +992,36 @@
                 setTimeout(() => {
                     droplet.element.classList.remove('playing');
                 }, 500);
+            }
+
+            createBasinRipple(dropletData) {
+                const rippleCount = 5;
+                const totalDuration = 1200; // Corresponds to animation-duration in CSS
+                const stagger = 150; // ms
+
+                const x = this.basinCenter.x + dropletData.x;
+                const y = this.basinCenter.y + dropletData.y;
+
+                for (let i = 0; i < rippleCount; i++) {
+                    const ripple = document.createElement('div');
+                    ripple.className = 'basin-ripple';
+
+                    ripple.style.left = `${x}px`;
+                    ripple.style.top = `${y}px`;
+
+                    // Stagger the animation start time
+                    ripple.style.animationDelay = `${i * stagger}ms`;
+
+                    // Dim the outer ripples to match the sketch
+                    ripple.style.opacity = 1 - (i / rippleCount);
+
+                    this.basin.appendChild(ripple);
+
+                    // Remove the ripple from the DOM after its animation is complete
+                    setTimeout(() => {
+                        ripple.remove();
+                    }, totalDuration + (i * stagger));
+                }
             }
 
             showParameterMenu(dropletData) {

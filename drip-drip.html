@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drip Drip - Loop Music Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .timeline {
+            width: 80%;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-bottom: 40px;
+            position: relative;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .timeline-grid {
+            width: 100%;
+            height: 100%;
+            display: flex;
+        }
+
+        .timeline-beat {
+            flex: 1;
+            border-right: 2px solid rgba(255, 255, 255, 0.3);
+            position: relative;
+            display: flex;
+        }
+
+        .timeline-beat:last-child {
+            border-right: none;
+        }
+
+        .timeline-beat.active {
+            background: rgba(0, 255, 255, 0.3);
+        }
+
+        .timeline-subdivision {
+            flex: 1;
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .timeline-subdivision:last-child {
+            border-right: none;
+        }
+
+        .timeline-beat-number {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            z-index: 2;
+        }
+
+        .timeline-subdivision.active {
+            background: rgba(0, 255, 255, 0.2);
+        }
+
+        .droplet-marker {
+            position: absolute;
+            top: 20px;
+            width: 8px;
+            height: 20px;
+            background: #00ffff;
+            border-radius: 4px;
+            transform: translateX(-50%);
+            pointer-events: auto;
+            cursor: grab;
+            transition: none;
+        }
+
+        .droplet-marker.selected {
+            border: 2px solid white;
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+        }
+
+        .droplet-marker:hover {
+            background: #00cccc;
+            transform: translateX(-50%) scale(1.1);
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+            transition: all 0.2s ease;
+        }
+
+        .droplet-marker:active {
+            cursor: grabbing;
+            transform: translateX(-50%) scale(1.2);
+            transition: none;
+        }
+
+        .basin {
+            width: 400px;
+            height: 400px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            position: relative;
+            background: radial-gradient(circle, rgba(0, 150, 255, 0.1) 0%, rgba(0, 50, 150, 0.05) 70%, transparent 100%);
+            cursor: crosshair;
+        }
+
+        .droplet {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: radial-gradient(circle, #00ffff 0%, #0088ff 70%, #0044ff 100%);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            cursor: grab;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+            transition: box-shadow 0.2s ease;
+        }
+
+        .droplet:hover {
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+        }
+
+        .droplet:active {
+            cursor: grabbing;
+        }
+
+        .droplet.playing {
+            animation: ripple 0.5s ease-out;
+        }
+
+        .droplet.selected {
+            border: 2px solid white;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        @keyframes ripple {
+            0% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -50%) scale(2);
+                opacity: 0;
+            }
+        }
+
+        .controls {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .play-button {
+            padding: 12px 24px;
+            background: #00ffff;
+            color: #000;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .play-button:hover {
+            background: #00cccc;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 255, 255, 0.3);
+        }
+
+        .play-button:active {
+            transform: translateY(0);
+        }
+
+        .play-button.playing {
+            background: #ff4444;
+        }
+
+        .play-button.playing:hover {
+            background: #cc3333;
+        }
+
+        .info {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .parameter-menu {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid #00ffff;
+            border-radius: 10px;
+            padding: 20px;
+            min-width: 250px;
+            display: none;
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        }
+
+        .parameter-menu.visible {
+            display: block;
+        }
+
+        .parameter-menu h3 {
+            color: #00ffff;
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .parameter-group {
+            margin-bottom: 20px;
+        }
+
+        .parameter-group label {
+            display: block;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .parameter-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .parameter-group input[type="number"] {
+            width: 60px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .parameter-group select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .parameter-group select option {
+            background: #000;
+        }
+
+        .menu-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: #00ffff;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-close:hover {
+            color: #ff4444;
+        }
+
+        .velocity-display {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 12px;
+            text-align: center;
+            margin-top: 5px;
+        }
+
+        .ghost-marker {
+            position: absolute;
+            top: 20px;
+            width: 6px;
+            height: 16px;
+            background: rgba(0, 255, 255, 0.3);
+            border-radius: 3px;
+            transform: translateX(-50%);
+            pointer-events: none;
+            border: 1px solid rgba(0, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="timeline" id="timeline">
+            <div class="timeline-grid" id="timelineGrid"></div>
+        </div>
+        
+        <div class="basin" id="basin">
+            <!-- Droplets will be added here dynamically -->
+        </div>
+        
+        <div class="controls">
+            <button class="play-button" id="playButton">Play</button>
+        </div>
+        
+        <div class="info">
+            Click timeline to place droplets • Drag droplets in the basin to adjust pitch • Center = low, rim = high
+        </div>
+
+        <div class="parameter-menu" id="parameterMenu">
+            <button class="menu-close" id="menuClose">×</button>
+            <h3>Droplet Parameters</h3>
+            
+            <div class="parameter-group">
+                <label for="velocitySlider">Velocity</label>
+                <input type="range" id="velocitySlider" min="0.1" max="1.0" step="0.1" value="0.7">
+                <div class="velocity-display" id="velocityDisplay">70%</div>
+            </div>
+            
+            <div class="parameter-group">
+                <label for="repeatSelect">Repeat Pattern</label>
+                <select id="repeatSelect">
+                    <option value="none">No Repeat</option>
+                    <option value="every-beat">Every Beat</option>
+                    <option value="every-2-beats">Every 2 Beats</option>
+                    <option value="every-4-beats">Every 4 Beats</option>
+                    <option value="custom">Custom...</option>
+                </select>
+            </div>
+            
+            <div class="parameter-group" id="customRepeatGroup" style="display: none;">
+                <label for="customRepeatInput">Custom Repeat (beats)</label>
+                <input type="number" id="customRepeatInput" min="1" max="32" value="4">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DripDrip {
+            constructor() {
+                this.audioContext = null;
+                this.isPlaying = false;
+                this.currentPosition = 0;
+                this.beatsPerLoop = 4;
+                this.subdivisionsPerBeat = 16;
+                this.totalPositions = this.beatsPerLoop * this.subdivisionsPerBeat; // 64
+                this.bpm = 120;
+                this.droplets = [];
+                this.nextNoteTime = 0;
+                this.scheduler = null;
+                
+                // Action history for undo functionality
+                this.actionHistory = [];
+                this.maxHistorySize = 50;
+                
+                // Global dragging state
+                this.isDraggingMarker = false;
+                
+                this.initAudio();
+                this.initTimeline();
+                this.initBasin();
+                this.initControls();
+            }
+
+            initAudio() {
+                // Initialize Web Audio API
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Handle audio context state changes
+                this.audioContext.addEventListener('statechange', () => {
+                    console.log('Audio context state:', this.audioContext.state);
+                });
+            }
+
+            initTimeline() {
+                const timeline = document.getElementById('timeline');
+                const timelineGrid = document.getElementById('timelineGrid');
+                
+                // Create beat divisions with 16th note subdivisions
+                for (let beat = 0; beat < this.beatsPerLoop; beat++) {
+                    const beatDiv = document.createElement('div');
+                    beatDiv.className = 'timeline-beat';
+                    beatDiv.innerHTML = `<div class="timeline-beat-number">${beat + 1}</div>`;
+                    
+                    // Add 16 subdivisions per beat
+                    for (let sub = 0; sub < this.subdivisionsPerBeat; sub++) {
+                        const subDiv = document.createElement('div');
+                        subDiv.className = 'timeline-subdivision';
+                        beatDiv.appendChild(subDiv);
+                    }
+                    
+                    timelineGrid.appendChild(beatDiv);
+                }
+                
+                // Add click handler for placing droplets
+                timeline.addEventListener('click', (e) => {
+                    if (this.isDraggingMarker) return; // Don't allow placement while dragging markers
+                    
+                    const rect = timeline.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    
+                    // Calculate position with better precision
+                    const normalizedX = x / rect.width;
+                    const position = Math.round(normalizedX * this.totalPositions);
+                    
+                    // Ensure position is within bounds
+                    const clampedPosition = Math.max(0, Math.min(position, this.totalPositions - 1));
+                    
+                    this.addDroplet(clampedPosition);
+                });
+            }
+
+            initBasin() {
+                this.basin = document.getElementById('basin');
+                this.basinCenter = { x: 200, y: 200 }; // Half of 400px basin
+            }
+
+            initControls() {
+                const playButton = document.getElementById('playButton');
+                playButton.addEventListener('click', () => {
+                    // Ensure audio context is running (required for some browsers)
+                    if (this.audioContext.state === 'suspended') {
+                        this.audioContext.resume();
+                    }
+                    
+                    if (this.isPlaying) {
+                        this.stop();
+                    } else {
+                        this.play();
+                    }
+                });
+                
+                // Add spacebar controls
+                document.addEventListener('keydown', (e) => {
+                    // Only respond to spacebar and prevent default behavior
+                    if (e.code === 'Space') {
+                        e.preventDefault(); // Prevent page scrolling
+                        
+                        // Ensure audio context is running (required for some browsers)
+                        if (this.audioContext.state === 'suspended') {
+                            this.audioContext.resume();
+                        }
+                        
+                        if (this.isPlaying) {
+                            this.stop();
+                        } else {
+                            this.play();
+                        }
+                    }
+                    
+                    // Undo functionality with Command+Z (Mac) or Ctrl+Z (Windows/Linux)
+                    if ((e.metaKey || e.ctrlKey) && e.code === 'KeyZ') {
+                        e.preventDefault();
+                        this.undo();
+                    }
+                });
+                
+                // Clear highlighting when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('droplet') && 
+                        !e.target.classList.contains('droplet-marker') &&
+                        !e.target.closest('#parameterMenu') &&
+                        !e.target.closest('#timeline')) {
+                        this.clearAllHighlighting();
+                    }
+                });
+                
+                this.initParameterMenu();
+            }
+
+            initParameterMenu() {
+                const menu = document.getElementById('parameterMenu');
+                const closeBtn = document.getElementById('menuClose');
+                const velocitySlider = document.getElementById('velocitySlider');
+                const velocityDisplay = document.getElementById('velocityDisplay');
+                const repeatSelect = document.getElementById('repeatSelect');
+                const customRepeatGroup = document.getElementById('customRepeatGroup');
+                const customRepeatInput = document.getElementById('customRepeatInput');
+                
+                // Close menu
+                closeBtn.addEventListener('click', () => {
+                    menu.classList.remove('visible');
+                });
+                
+                // Close menu when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!menu.contains(e.target) && !e.target.classList.contains('droplet')) {
+                        menu.classList.remove('visible');
+                    }
+                });
+                
+                // Velocity slider
+                velocitySlider.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
+                    velocityDisplay.textContent = `${Math.round(value * 100)}%`;
+                    
+                    if (this.selectedDroplet) {
+                        this.selectedDroplet.velocity = value;
+                    }
+                });
+                
+                // Repeat pattern select
+                repeatSelect.addEventListener('change', (e) => {
+                    const value = e.target.value;
+                    customRepeatGroup.style.display = value === 'custom' ? 'block' : 'none';
+                    
+                    if (this.selectedDroplet) {
+                        this.selectedDroplet.repeatPattern = value;
+                        this.updateGhostMarkers(this.selectedDroplet);
+                    }
+                });
+                
+                // Custom repeat input
+                customRepeatInput.addEventListener('input', (e) => {
+                    const value = parseInt(e.target.value);
+                    if (this.selectedDroplet) {
+                        this.selectedDroplet.customRepeat = value;
+                        this.updateGhostMarkers(this.selectedDroplet);
+                    }
+                });
+            }
+
+            addDroplet(position) {
+                // Create timeline marker
+                const timeline = document.getElementById('timeline');
+                const marker = document.createElement('div');
+                marker.className = 'droplet-marker';
+                marker.style.left = `${(position / this.totalPositions) * 100}%`;
+                timeline.appendChild(marker);
+                
+                // Create basin droplet
+                const droplet = document.createElement('div');
+                droplet.className = 'droplet';
+                droplet.style.left = '50%';
+                droplet.style.top = '50%';
+                
+                // Generate unique ID for this droplet
+                const dropletId = this.generateDropletId();
+                
+                // Store droplet data
+                const dropletData = {
+                    id: dropletId,
+                    position: position,
+                    element: droplet,
+                    marker: marker,
+                    ghostMarkers: [],
+                    x: 0,
+                    y: 0,
+                    pitch: 0,
+                    velocity: 0.7,
+                    repeatPattern: 'none',
+                    customRepeat: 4
+                };
+                
+                this.droplets.push(dropletData);
+                this.basin.appendChild(droplet);
+                
+                // Add drag functionality
+                this.makeDropletDraggable(droplet, dropletData);
+                
+                // Add timeline marker drag functionality
+                this.makeTimelineMarkerDraggable(marker, dropletData);
+                
+                // Create initial ghost markers
+                this.updateGhostMarkers(dropletData);
+                
+                // Add to history for undo
+                this.addToHistory({
+                    type: 'addDroplet',
+                    dropletId: dropletId
+                });
+                
+                // Highlight the newly created marker and droplet
+                console.log('Adding highlighting for new droplet:', dropletData.id); // Debug log
+                this.highlightConnection(dropletData);
+                console.log('Highlighting added for new droplet'); // Debug log
+            }
+
+            makeDropletDraggable(droplet, dropletData) {
+                let isDragging = false;
+                let startX, startY;
+                let hasMoved = false;
+                
+                droplet.addEventListener('mousedown', (e) => {
+                    // Allow dragging even while playing for real-time pitch changes
+                    isDragging = true;
+                    hasMoved = false;
+                    
+                    // Highlight the connection when starting to drag
+                    this.highlightConnection(dropletData);
+                    
+                    // Get the current position of the droplet relative to the basin
+                    const rect = this.basin.getBoundingClientRect();
+                    const dropletRect = droplet.getBoundingClientRect();
+                    
+                    // Calculate current droplet position relative to basin center
+                    const currentX = (dropletRect.left + dropletRect.width / 2) - (rect.left + rect.width / 2);
+                    const currentY = (dropletRect.top + dropletRect.height / 2) - (rect.top + rect.height / 2);
+                    
+                    // Set the starting position to the current droplet position
+                    startX = currentX;
+                    startY = currentY;
+                    
+                    e.preventDefault();
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    
+                    const rect = this.basin.getBoundingClientRect();
+                    const mouseX = e.clientX - (rect.left + rect.width / 2);
+                    const mouseY = e.clientY - (rect.top + rect.height / 2);
+                    
+                    // Only start moving after a small threshold to prevent accidental jumps
+                    const moveThreshold = 5;
+                    const distanceMoved = Math.sqrt(
+                        Math.pow(mouseX - startX, 2) + Math.pow(mouseY - startY, 2)
+                    );
+                    
+                    if (!hasMoved && distanceMoved < moveThreshold) {
+                        return;
+                    }
+                    
+                    hasMoved = true;
+                    
+                    // Constrain to basin circle
+                    const distance = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
+                    const maxDistance = 190; // Basin radius minus droplet size
+                    
+                    if (distance > maxDistance) {
+                        const angle = Math.atan2(mouseY, mouseX);
+                        dropletData.x = Math.cos(angle) * maxDistance;
+                        dropletData.y = Math.sin(angle) * maxDistance;
+                    } else {
+                        dropletData.x = mouseX;
+                        dropletData.y = mouseY;
+                    }
+                    
+                    // Update visual position
+                    droplet.style.left = `${this.basinCenter.x + dropletData.x}px`;
+                    droplet.style.top = `${this.basinCenter.y + dropletData.y}px`;
+                    
+                    // Calculate pitch based on distance from center
+                    const normalizedDistance = Math.min(distance / maxDistance, 1);
+                    dropletData.pitch = normalizedDistance;
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    isDragging = false;
+                });
+
+                // Add click handler for parameter menu
+                droplet.addEventListener('click', (e) => {
+                    if (isDragging || hasMoved) return; // Don't show menu if we were dragging
+                    
+                    // Highlight the connection
+                    this.highlightConnection(dropletData);
+                    
+                    // Show parameter menu even during playback
+                    this.showParameterMenu(dropletData);
+                    e.stopPropagation();
+                });
+            }
+
+            makeTimelineMarkerDraggable(marker, dropletData) {
+                let isDragging = false;
+                let startLeft;
+                let handleMouseMove, handleMouseUp;
+                let hasMoved = false;
+                
+                const startDrag = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    
+                    // Start with highlighting (will be cancelled if we drag)
+                    this.highlightConnection(dropletData);
+                    
+                    isDragging = true;
+                    hasMoved = false;
+                    this.isDraggingMarker = true;
+                    startLeft = parseFloat(marker.style.left);
+                    
+                    // Add a temporary overlay to prevent timeline clicks
+                    const overlay = document.createElement('div');
+                    overlay.style.position = 'fixed';
+                    overlay.style.top = '0';
+                    overlay.style.left = '0';
+                    overlay.style.width = '100%';
+                    overlay.style.height = '100%';
+                    overlay.style.zIndex = '9999';
+                    overlay.style.background = 'transparent';
+                    overlay.id = 'dragOverlay';
+                    document.body.appendChild(overlay);
+                    
+                    // Define event handlers
+                    handleMouseMove = (e) => {
+                        if (!isDragging) return;
+                        
+                        // Keep the highlighting during drag (don't clear it)
+                        // The highlighting shows the connection even while dragging
+                        
+                        const timeline = document.getElementById('timeline');
+                        const rect = timeline.getBoundingClientRect();
+                        const mouseX = e.clientX - rect.left;
+                        
+                        // Snap to grid positions (0-63) - this creates the "jumping" effect
+                        const gridPosition = Math.round((mouseX / rect.width) * this.totalPositions);
+                        const snappedPosition = Math.max(0, Math.min(this.totalPositions - 1, gridPosition));
+                        
+                        // Update marker position - this will "jump" to grid positions
+                        const snappedLeftPercent = (snappedPosition / this.totalPositions) * 100;
+                        marker.style.left = `${snappedLeftPercent}%`;
+                        
+                        // Update droplet data
+                        dropletData.position = snappedPosition;
+                        
+                        // Update ghost markers
+                        this.updateGhostMarkers(dropletData);
+                    };
+                    
+                    handleMouseUp = (e) => {
+                        if (!isDragging) return;
+                        
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        
+                        // Remove overlay
+                        const overlay = document.getElementById('dragOverlay');
+                        if (overlay) {
+                            overlay.remove();
+                        }
+                        
+                        // Reset states
+                        isDragging = false;
+                        hasMoved = false;
+                        this.isDraggingMarker = false;
+                        
+                        // Add to history for undo
+                        this.addToHistory({
+                            type: 'moveDroplet',
+                            dropletId: dropletData.id,
+                            oldPosition: startLeft
+                        });
+                        
+                        // Remove event listeners
+                        document.removeEventListener('mousemove', handleMouseMove);
+                        document.removeEventListener('mouseup', handleMouseUp);
+                    };
+                    
+                    // Add event listeners
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                };
+                
+                // Add the mousedown listener to the marker
+                marker.addEventListener('mousedown', startDrag);
+            }
+
+            play() {
+                if (this.isPlaying) return;
+                
+                // Resume audio context if it's suspended (required for some browsers)
+                if (this.audioContext.state === 'suspended') {
+                    this.audioContext.resume();
+                }
+                
+                this.isPlaying = true;
+                this.currentPosition = 0;
+                
+                // Start immediately
+                this.nextNoteTime = this.audioContext.currentTime;
+                
+                const playButton = document.getElementById('playButton');
+                playButton.textContent = 'Stop';
+                playButton.classList.add('playing');
+                
+                // Use a more precise timing method
+                this.scheduleNextNote();
+            }
+
+            scheduleNextNote() {
+                if (!this.isPlaying) return;
+                
+                const now = this.audioContext.currentTime;
+                const beatTime = 60.0 / this.bpm; // Time for one beat
+                const sixteenthNoteTime = beatTime / this.subdivisionsPerBeat; // Time for one 16th note
+                
+                // Schedule the current note
+                if (now >= this.nextNoteTime) {
+                    this.playBeat(this.currentPosition);
+                    this.currentPosition = (this.currentPosition + 1) % this.totalPositions;
+                    this.nextNoteTime += sixteenthNoteTime;
+                }
+                
+                // Schedule the next check
+                this.scheduler = setTimeout(() => {
+                    this.scheduleNextNote();
+                }, 10); // Check every 10ms for precision
+            }
+
+            stop() {
+                this.isPlaying = false;
+                clearTimeout(this.scheduler);
+                
+                const playButton = document.getElementById('playButton');
+                playButton.textContent = 'Play';
+                playButton.classList.remove('playing');
+                
+                // Remove active beat highlighting
+                document.querySelectorAll('.timeline-beat').forEach(beat => {
+                    beat.classList.remove('active');
+                });
+                
+                // Remove active subdivision highlighting
+                document.querySelectorAll('.timeline-subdivision').forEach(sub => {
+                    sub.classList.remove('active');
+                });
+            }
+
+            playBeat(position) {
+                const beatIndex = Math.floor(position / this.subdivisionsPerBeat);
+                const subIndex = position % this.subdivisionsPerBeat;
+                
+                // Highlight current beat
+                document.querySelectorAll('.timeline-beat').forEach((beat, index) => {
+                    beat.classList.toggle('active', index === beatIndex);
+                });
+                
+                // Highlight current subdivision
+                document.querySelectorAll('.timeline-subdivision').forEach((sub, index) => {
+                    const subBeatIndex = Math.floor(index / this.subdivisionsPerBeat);
+                    const subSubIndex = index % this.subdivisionsPerBeat;
+                    sub.classList.toggle('active', subBeatIndex === beatIndex && subSubIndex === subIndex);
+                });
+                
+                // Play droplets on this position
+                this.droplets.forEach(droplet => {
+                    if (this.shouldDropletPlay(droplet, position)) {
+                        this.playDropletSound(droplet);
+                        this.animateDroplet(droplet);
+                    }
+                });
+            }
+
+            shouldDropletPlay(droplet, position) {
+                // Check if this is the original position
+                if (droplet.position === position) {
+                    return true;
+                }
+                
+                // Check repeat patterns
+                if (droplet.repeatPattern === 'none') {
+                    return false;
+                }
+                
+                const originalBeat = Math.floor(droplet.position / this.subdivisionsPerBeat);
+                const currentBeat = Math.floor(position / this.subdivisionsPerBeat);
+                const originalSub = droplet.position % this.subdivisionsPerBeat;
+                const currentSub = position % this.subdivisionsPerBeat;
+                
+                // Must be on the same subdivision within the beat
+                if (originalSub !== currentSub) {
+                    return false;
+                }
+                
+                // Check repeat interval
+                let repeatInterval;
+                switch (droplet.repeatPattern) {
+                    case 'every-beat':
+                        repeatInterval = 1;
+                        break;
+                    case 'every-2-beats':
+                        repeatInterval = 2;
+                        break;
+                    case 'every-4-beats':
+                        repeatInterval = 4;
+                        break;
+                    case 'custom':
+                        repeatInterval = droplet.customRepeat;
+                        break;
+                    default:
+                        return false;
+                }
+                
+                // Check if current beat is a repeat of the original
+                const beatDifference = currentBeat - originalBeat;
+                if (beatDifference <= 0) {
+                    return false; // Only repeat forward in time
+                }
+                
+                return beatDifference % repeatInterval === 0;
+            }
+
+            playDropletSound(droplet) {
+                // Create oscillator for water drop sound
+                const oscillator = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                
+                // Connect nodes
+                oscillator.connect(gainNode);
+                gainNode.connect(this.audioContext.destination);
+                
+                // Set frequency based on pitch (distance from center)
+                const baseFreq = 200; // Base frequency
+                const maxFreq = 800; // Max frequency
+                const frequency = baseFreq + (droplet.pitch * (maxFreq - baseFreq));
+                
+                oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                oscillator.type = 'sine';
+                
+                // Create envelope for water drop effect
+                const now = this.audioContext.currentTime;
+                const maxVolume = 0.3 * droplet.velocity; // Scale by velocity
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(maxVolume, now + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                
+                // Add some noise for water effect
+                const noise = this.audioContext.createOscillator();
+                const noiseGain = this.audioContext.createGain();
+                noise.connect(noiseGain);
+                noiseGain.connect(this.audioContext.destination);
+                
+                noise.frequency.setValueAtTime(frequency * 2, now);
+                noise.type = 'sawtooth';
+                noiseGain.gain.setValueAtTime(0, now);
+                noiseGain.gain.linearRampToValueAtTime(0.1 * droplet.velocity, now + 0.01);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                
+                // Start and stop oscillators
+                oscillator.start(now);
+                oscillator.stop(now + 0.3);
+                noise.start(now);
+                noise.stop(now + 0.2);
+            }
+
+            animateDroplet(droplet) {
+                droplet.element.classList.add('playing');
+                setTimeout(() => {
+                    droplet.element.classList.remove('playing');
+                }, 500);
+            }
+
+            showParameterMenu(dropletData) {
+                this.selectedDroplet = dropletData;
+                
+                const menu = document.getElementById('parameterMenu');
+                const velocitySlider = document.getElementById('velocitySlider');
+                const velocityDisplay = document.getElementById('velocityDisplay');
+                const repeatSelect = document.getElementById('repeatSelect');
+                const customRepeatGroup = document.getElementById('customRepeatGroup');
+                const customRepeatInput = document.getElementById('customRepeatInput');
+                
+                // Populate menu with current values
+                velocitySlider.value = dropletData.velocity;
+                velocityDisplay.textContent = `${Math.round(dropletData.velocity * 100)}%`;
+                repeatSelect.value = dropletData.repeatPattern;
+                customRepeatInput.value = dropletData.customRepeat;
+                customRepeatGroup.style.display = dropletData.repeatPattern === 'custom' ? 'block' : 'none';
+                
+                // Show menu
+                menu.classList.add('visible');
+            }
+
+            updateGhostMarkers(dropletData) {
+                // Remove existing ghost markers
+                dropletData.ghostMarkers.forEach(marker => {
+                    if (marker.parentNode) {
+                        marker.parentNode.removeChild(marker);
+                    }
+                });
+                dropletData.ghostMarkers = [];
+                
+                // Don't create ghosts if no repeat pattern
+                if (dropletData.repeatPattern === 'none') {
+                    return;
+                }
+                
+                const timeline = document.getElementById('timeline');
+                const originalBeat = Math.floor(dropletData.position / this.subdivisionsPerBeat);
+                const originalSub = dropletData.position % this.subdivisionsPerBeat;
+                
+                // Calculate repeat interval
+                let repeatInterval;
+                switch (dropletData.repeatPattern) {
+                    case 'every-beat':
+                        repeatInterval = 1;
+                        break;
+                    case 'every-2-beats':
+                        repeatInterval = 2;
+                        break;
+                    case 'every-4-beats':
+                        repeatInterval = 4;
+                        break;
+                    case 'custom':
+                        repeatInterval = dropletData.customRepeat;
+                        break;
+                    default:
+                        return;
+                }
+                
+                // Create ghost markers for all repeats within the loop
+                let i = 1;
+                while (true) {
+                    const repeatBeat = originalBeat + (i * repeatInterval);
+                    
+                    // Stop when we exceed the loop length
+                    if (repeatBeat >= this.beatsPerLoop) {
+                        break;
+                    }
+                    
+                    const repeatPosition = (repeatBeat * this.subdivisionsPerBeat) + originalSub;
+                    
+                    const ghostMarker = document.createElement('div');
+                    ghostMarker.className = 'ghost-marker';
+                    ghostMarker.style.left = `${(repeatPosition / this.totalPositions) * 100}%`;
+                    timeline.appendChild(ghostMarker);
+                    
+                    dropletData.ghostMarkers.push(ghostMarker);
+                    i++;
+                }
+            }
+
+            // Add action to history
+            addToHistory(action) {
+                this.actionHistory.push(action);
+                
+                // Limit history size
+                if (this.actionHistory.length > this.maxHistorySize) {
+                    this.actionHistory.shift();
+                }
+            }
+
+            // Undo last action
+            undo() {
+                if (this.actionHistory.length === 0) return;
+                
+                const lastAction = this.actionHistory.pop();
+                
+                switch (lastAction.type) {
+                    case 'addDroplet':
+                        this.removeDroplet(lastAction.dropletId);
+                        break;
+                    case 'removeDroplet':
+                        this.restoreDroplet(lastAction.dropletData);
+                        break;
+                    case 'moveDroplet':
+                        this.moveDropletToPosition(lastAction.dropletId, lastAction.oldPosition);
+                        break;
+                    case 'changeParameter':
+                        this.restoreDropletParameter(lastAction.dropletId, lastAction.parameter, lastAction.oldValue);
+                        break;
+                }
+            }
+
+            // Generate unique ID for droplets
+            generateDropletId() {
+                return Date.now() + Math.random().toString(36).substr(2, 9);
+            }
+
+            // Remove droplet by ID
+            removeDroplet(dropletId) {
+                const dropletIndex = this.droplets.findIndex(d => d.id === dropletId);
+                if (dropletIndex === -1) return;
+                
+                const droplet = this.droplets[dropletIndex];
+                
+                // Remove from DOM
+                if (droplet.element.parentNode) {
+                    droplet.element.parentNode.removeChild(droplet.element);
+                }
+                if (droplet.marker.parentNode) {
+                    droplet.marker.parentNode.removeChild(droplet.marker);
+                }
+                
+                // Remove ghost markers
+                droplet.ghostMarkers.forEach(marker => {
+                    if (marker.parentNode) {
+                        marker.parentNode.removeChild(marker);
+                    }
+                });
+                
+                // Remove from array
+                this.droplets.splice(dropletIndex, 1);
+            }
+
+            // Restore droplet from saved data
+            restoreDroplet(dropletData) {
+                // Recreate timeline marker
+                const timeline = document.getElementById('timeline');
+                const marker = document.createElement('div');
+                marker.className = 'droplet-marker';
+                marker.style.left = `${(dropletData.position / this.totalPositions) * 100}%`;
+                timeline.appendChild(marker);
+                
+                // Recreate basin droplet
+                const droplet = document.createElement('div');
+                droplet.className = 'droplet';
+                droplet.style.left = `${this.basinCenter.x + dropletData.x}px`;
+                droplet.style.top = `${this.basinCenter.y + dropletData.y}px`;
+                
+                // Create new droplet data
+                const newDropletData = {
+                    ...dropletData,
+                    element: droplet,
+                    marker: marker,
+                    ghostMarkers: []
+                };
+                
+                this.droplets.push(newDropletData);
+                this.basin.appendChild(droplet);
+                
+                // Add drag functionality
+                this.makeDropletDraggable(droplet, newDropletData);
+                
+                // Recreate ghost markers
+                this.updateGhostMarkers(newDropletData);
+            }
+
+            // Move droplet to specific position
+            moveDropletToPosition(dropletId, position) {
+                const droplet = this.droplets.find(d => d.id === dropletId);
+                if (!droplet) return;
+                
+                // Update position
+                droplet.position = position;
+                
+                // Update marker position
+                droplet.marker.style.left = `${(position / this.totalPositions) * 100}%`;
+                
+                // Update ghost markers
+                this.updateGhostMarkers(droplet);
+            }
+
+            // Restore droplet parameter
+            restoreDropletParameter(dropletId, parameter, value) {
+                const droplet = this.droplets.find(d => d.id === dropletId);
+                if (!droplet) return;
+                
+                droplet[parameter] = value;
+                
+                if (parameter === 'repeatPattern' || parameter === 'customRepeat') {
+                    this.updateGhostMarkers(droplet);
+                }
+            }
+
+            // Highlight connection between marker and droplet
+            highlightConnection(dropletData) {
+                console.log('highlightConnection called for droplet:', dropletData.id); // Debug log
+                
+                this.clearAllHighlighting();
+                
+                // Highlight the corresponding droplet
+                if (dropletData.marker) {
+                    dropletData.marker.classList.add('selected');
+                    console.log('Added selected class to marker'); // Debug log
+                }
+                if (dropletData.element) {
+                    dropletData.element.classList.add('selected');
+                    console.log('Added selected class to droplet'); // Debug log
+                }
+                
+                console.log('highlightConnection completed'); // Debug log
+            }
+
+            // Clear all highlighting
+            clearAllHighlighting() {
+                document.querySelectorAll('.droplet-marker').forEach(marker => {
+                    marker.classList.remove('selected');
+                });
+                document.querySelectorAll('.droplet').forEach(droplet => {
+                    droplet.classList.remove('selected');
+                });
+            }
+        }
+
+        // Initialize the application when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new DripDrip();
+        });
+    </script>
+</body>
+</html> 

@@ -118,12 +118,15 @@
         .basin {
             width: 480px;
             height: 480px;
-            border: 2px solid #fff;
+            border: 2px solid #005a7a;
             border-radius: 50%;
             position: relative;
-            background: radial-gradient(circle, rgba(0, 150, 255, 0.1) 0%, rgba(0, 50, 150, 0.05) 70%, transparent 100%);
+            background: radial-gradient(circle, rgba(5, 15, 25, 0.8) 0%, rgba(0, 80, 120, 0.5) 75%, rgba(0, 180, 220, 0.3) 98%);
             cursor: crosshair;
             overflow: hidden;
+            box-shadow: inset 0px 10px 25px rgba(0, 0, 0, 0.5), 
+                        inset 0px -10px 25px rgba(255, 255, 255, 0.1),
+                        0 0 15px rgba(0, 180, 220, 0.3);
         }
 
         .basin-ripple {
@@ -326,6 +329,41 @@
             border: none;
             box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.4), inset -1px -1px 2px rgba(0, 0, 0, 0.2);
         }
+
+        .cave-mode-button {
+            position: fixed;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            font-size: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-transform: lowercase;
+            font-family: monospace;
+        }
+
+        .cave-mode-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .cave-mode-button.active {
+            background: rgba(0, 90, 122, 0.8);
+            color: rgba(0, 255, 255, 0.8);
+            border-color: rgba(0, 255, 255, 0.6);
+            box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -345,6 +383,8 @@
         <div class="info">
             Click timeline or basin to place droplets • Drag in basin to adjust pitch • Center = low, rim = high
         </div>
+
+        <button class="cave-mode-button" id="caveModeButton">cave mode</button>
 
         <div class="parameter-menu" id="parameterMenu">
             <button class="menu-close" id="menuClose">×</button>
@@ -379,6 +419,7 @@
             constructor() {
                 this.audioContext = null;
                 this.isPlaying = false;
+                this.isCaveMode = false;
                 this.currentPosition = 0;
                 this.beatsPerLoop = 4;
                 this.subdivisionsPerBeat = 16;
@@ -413,10 +454,46 @@
                 return buffer;
             }
 
+            createReverbImpulseResponse() {
+                const duration = 2.5;
+                const decay = 3.0;
+                const sampleRate = this.audioContext.sampleRate;
+                const length = sampleRate * duration;
+                const impulse = this.audioContext.createBuffer(2, length, sampleRate); // Stereo
+                const impulseL = impulse.getChannelData(0);
+                const impulseR = impulse.getChannelData(1);
+
+                for (let i = 0; i < length; i++) {
+                    const n = length - i;
+                    impulseL[i] = (Math.random() * 2 - 1) * Math.pow(n / length, decay);
+                    impulseR[i] = (Math.random() * 2 - 1) * Math.pow(n / length, decay);
+                }
+                return impulse;
+            }
+
             initAudio() {
                 // Initialize Web Audio API
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 
+                // --- Master Reverb Effect ---
+                this.masterInput = this.audioContext.createGain();
+                
+                // Dry path
+                const dryGain = this.audioContext.createGain();
+                dryGain.gain.value = 1.0;
+                this.masterInput.connect(dryGain);
+                dryGain.connect(this.audioContext.destination);
+
+                // Wet path (Reverb) - start with reverb off
+                this.reverbWetGain = this.audioContext.createGain();
+                this.reverbWetGain.gain.value = 0.0;
+                const reverbNode = this.audioContext.createConvolver();
+                reverbNode.buffer = this.createReverbImpulseResponse();
+                
+                this.masterInput.connect(this.reverbWetGain);
+                this.reverbWetGain.connect(reverbNode);
+                reverbNode.connect(this.audioContext.destination);
+
                 // Create a reusable white noise buffer for the impact sound
                 this.noiseBuffer = this.createNoiseBuffer();
                 
@@ -510,6 +587,11 @@
                     } else {
                         this.play();
                     }
+                });
+
+                const caveModeButton = document.getElementById('caveModeButton');
+                caveModeButton.addEventListener('click', () => {
+                    this.toggleCaveMode();
                 });
                 
                 // Add spacebar controls
@@ -862,8 +944,11 @@
             play() {
                 if (this.isPlaying) return;
                 
+                console.log('Play function called'); // Debug log
+                
                 // Resume audio context if it's suspended (required for some browsers)
                 if (this.audioContext.state === 'suspended') {
+                    console.log('Resuming audio context'); // Debug log
                     this.audioContext.resume();
                 }
                 
@@ -877,6 +962,7 @@
                 playButton.textContent = 'Stop';
                 playButton.classList.add('playing');
                 
+                console.log('Starting scheduler'); // Debug log
                 // Use a more precise timing method
                 this.scheduleNextNote();
             }
@@ -890,6 +976,7 @@
                 
                 // Schedule the current note
                 if (now >= this.nextNoteTime) {
+                    console.log('Playing beat at position:', this.currentPosition); // Debug log
                     this.playBeat(this.currentPosition);
                     this.currentPosition = (this.currentPosition + 1) % this.totalPositions;
                     this.nextNoteTime += sixteenthNoteTime;
@@ -1002,17 +1089,17 @@
                 noiseSource.buffer = this.noiseBuffer;
                 const noiseGain = this.audioContext.createGain();
                 noiseSource.connect(noiseGain);
-                noiseGain.connect(this.audioContext.destination);
+                noiseGain.connect(this.masterInput);
 
                 // --- Create Resonance Sound (Tonal Plink) ---
                 const oscillator = this.audioContext.createOscillator();
                 const gainNode = this.audioContext.createGain();
                 const filter = this.audioContext.createBiquadFilter();
 
-                // Connect nodes: oscillator -> filter -> gain -> destination
+                // Connect nodes: oscillator -> filter -> gain -> masterInput
                 oscillator.connect(filter);
                 filter.connect(gainNode);
-                gainNode.connect(this.audioContext.destination);
+                gainNode.connect(this.masterInput);
 
                 // --- Configure Oscillator (Pitch) ---
                 const baseFreq = 100;
@@ -1314,6 +1401,21 @@
                 document.querySelectorAll('.droplet').forEach(droplet => {
                     droplet.classList.remove('selected');
                 });
+            }
+
+            toggleCaveMode() {
+                console.log('toggleCaveMode called'); // Debug log
+                this.isCaveMode = !this.isCaveMode;
+                console.log('Cave mode is now:', this.isCaveMode); // Debug log
+
+                const caveModeButton = document.getElementById('caveModeButton');
+                caveModeButton.classList.toggle('active', this.isCaveMode);
+
+                // Smoothly fade reverb in/out
+                const now = this.audioContext.currentTime;
+                const targetVolume = this.isCaveMode ? 0.3 : 0.0;
+                console.log('Setting reverb volume to:', targetVolume); // Debug log
+                this.reverbWetGain.gain.linearRampToValueAtTime(targetVolume, now + 0.5);
             }
         }
 

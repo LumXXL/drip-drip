@@ -401,9 +401,24 @@
                 this.initControls();
             }
 
+            createNoiseBuffer() {
+                const bufferSize = this.audioContext.sampleRate;
+                const buffer = this.audioContext.createBuffer(1, bufferSize, bufferSize);
+                const output = buffer.getChannelData(0);
+
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+
+                return buffer;
+            }
+
             initAudio() {
                 // Initialize Web Audio API
                 this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Create a reusable white noise buffer for the impact sound
+                this.noiseBuffer = this.createNoiseBuffer();
                 
                 // Handle audio context state changes
                 this.audioContext.addEventListener('statechange', () => {
@@ -806,15 +821,16 @@
                         
                         // Reset states
                         isDragging = false;
-                        hasMoved = false;
                         this.isDraggingMarker = false;
                         
-                        // Add to history for undo
-                        this.addToHistory({
-                            type: 'moveDroplet',
-                            dropletId: dropletData.id,
-                            oldPosition: startPosition
-                        });
+                        // Add to history for undo only if the marker was actually moved
+                        if (hasMoved) {
+                            this.addToHistory({
+                                type: 'moveDroplet',
+                                dropletId: dropletData.id,
+                                oldPosition: startPosition
+                            });
+                        }
                         
                         // Remove event listeners
                         document.removeEventListener('mousemove', handleMouseMove);
@@ -828,6 +844,19 @@
                 
                 // Add the mousedown listener to the marker
                 marker.addEventListener('mousedown', startDrag);
+
+                // Add a separate click handler for opening the parameter menu
+                marker.addEventListener('click', (e) => {
+                    // If the marker was dragged, don't open the menu
+                    if (hasMoved) {
+                        return;
+                    }
+                    
+                    // Open the parameter menu
+                    this.highlightConnection(dropletData);
+                    this.showParameterMenu(dropletData);
+                    e.stopPropagation();
+                });
             }
 
             play() {
@@ -966,46 +995,63 @@
             }
 
             playDropletSound(droplet) {
-                // Create oscillator for water drop sound
+                const now = this.audioContext.currentTime;
+
+                // --- Create Impact Sound (Noise Burst) ---
+                const noiseSource = this.audioContext.createBufferSource();
+                noiseSource.buffer = this.noiseBuffer;
+                const noiseGain = this.audioContext.createGain();
+                noiseSource.connect(noiseGain);
+                noiseGain.connect(this.audioContext.destination);
+
+                // --- Create Resonance Sound (Tonal Plink) ---
                 const oscillator = this.audioContext.createOscillator();
                 const gainNode = this.audioContext.createGain();
-                
-                // Connect nodes
-                oscillator.connect(gainNode);
+                const filter = this.audioContext.createBiquadFilter();
+
+                // Connect nodes: oscillator -> filter -> gain -> destination
+                oscillator.connect(filter);
+                filter.connect(gainNode);
                 gainNode.connect(this.audioContext.destination);
+
+                // --- Configure Oscillator (Pitch) ---
+                const baseFreq = 100;
+                const maxFreq = 2000;
+                const startFreq = baseFreq + (droplet.pitch * (maxFreq - baseFreq));
+                const endFreq = startFreq * 2;
                 
-                // Set frequency based on pitch (distance from center)
-                const baseFreq = 200; // Base frequency
-                const maxFreq = 800; // Max frequency
-                const frequency = baseFreq + (droplet.pitch * (maxFreq - baseFreq));
-                
-                oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
                 oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(startFreq, now);
+                oscillator.frequency.exponentialRampToValueAtTime(endFreq, now + 0.05);
+
+                // --- Configure Filter (Timbre) ---
+                filter.type = 'lowpass';
+                filter.Q.value = 20; // High resonance for a "plink" sound
                 
-                // Create envelope for water drop effect
-                const now = this.audioContext.currentTime;
-                const maxVolume = 0.3 * droplet.velocity; // Scale by velocity
+                // The filter sweep creates the percussive sound
+                const filterStartFreq = endFreq * 1.5;
+                const filterEndFreq = startFreq * 0.5;
+
+                filter.frequency.setValueAtTime(filterStartFreq, now);
+                filter.frequency.exponentialRampToValueAtTime(filterEndFreq, now + 0.08);
+
+                // --- Configure Envelopes ---
+                // Impact sound envelope (very short and sharp)
+                const impactVolume = 0.1 * droplet.velocity;
+                noiseGain.gain.setValueAtTime(0, now);
+                noiseGain.gain.linearRampToValueAtTime(impactVolume, now + 0.005);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+                // Resonance sound envelope
+                const maxVolume = 0.3 * droplet.velocity;
                 gainNode.gain.setValueAtTime(0, now);
                 gainNode.gain.linearRampToValueAtTime(maxVolume, now + 0.01);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
                 
-                // Add some noise for water effect
-                const noise = this.audioContext.createOscillator();
-                const noiseGain = this.audioContext.createGain();
-                noise.connect(noiseGain);
-                noiseGain.connect(this.audioContext.destination);
-                
-                noise.frequency.setValueAtTime(frequency * 2, now);
-                noise.type = 'sawtooth';
-                noiseGain.gain.setValueAtTime(0, now);
-                noiseGain.gain.linearRampToValueAtTime(0.1 * droplet.velocity, now + 0.01);
-                noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-                
-                // Start and stop oscillators
+                // --- Start and Stop Sounds ---
+                noiseSource.start(now);
                 oscillator.start(now);
                 oscillator.stop(now + 0.3);
-                noise.start(now);
-                noise.stop(now + 0.2);
             }
 
             createBasinRipple(dropletData) {

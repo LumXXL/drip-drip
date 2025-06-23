@@ -31,7 +31,7 @@
             width: 80%;
             height: 60px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            border-radius: 0;
             margin-bottom: 40px;
             position: relative;
             cursor: pointer;
@@ -71,7 +71,7 @@
 
         .timeline-beat-number {
             position: absolute;
-            top: 5px;
+            top: -18px;
             left: 50%;
             transform: translateX(-50%);
             color: rgba(255, 255, 255, 0.6);
@@ -85,15 +85,16 @@
 
         .droplet-marker {
             position: absolute;
-            top: 20px;
-            width: 8px;
-            height: 20px;
+            top: 0;
+            width: 1.5625%; /* 100% / 64 positions */
+            height: 100%;
             background: #00ffff;
-            border-radius: 4px;
+            border-radius: 0;
             transform: translateX(-50%);
             pointer-events: auto;
             cursor: grab;
             transition: none;
+            box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.5), inset -1px -1px 2px rgba(0, 0, 0, 0.3);
         }
 
         .droplet-marker.selected {
@@ -135,6 +136,7 @@
             transform: translate(-50%, -50%);
             animation: basinRipple 1.2s ease-out forwards;
             background: transparent;
+            z-index: 1;
         }
 
         @keyframes basinRipple {
@@ -149,14 +151,15 @@
 
         .droplet {
             position: absolute;
-            width: 20px;
-            height: 20px;
-            background: radial-gradient(circle, #00ffff 0%, #0088ff 70%, #0044ff 100%);
-            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            width: 15px;
+            height: 15px;
+            background: #0088ff;
+            border-radius: 50%;
             cursor: grab;
             transform: translate(-50%, -50%);
             box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
             transition: box-shadow 0.2s ease;
+            z-index: 10;
         }
 
         .droplet:hover {
@@ -167,24 +170,9 @@
             cursor: grabbing;
         }
 
-        .droplet.playing {
-            animation: ripple 0.5s ease-out;
-        }
-
         .droplet.selected {
             border: 2px solid white;
             box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-        }
-
-        @keyframes ripple {
-            0% {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 1;
-            }
-            100% {
-                transform: translate(-50%, -50%) scale(2);
-                opacity: 0;
-            }
         }
 
         .controls {
@@ -328,14 +316,15 @@
 
         .ghost-marker {
             position: absolute;
-            top: 20px;
-            width: 6px;
-            height: 16px;
+            top: 0;
+            width: 1.5625%; /* 100% / 64 positions */
+            height: 100%;
             background: rgba(0, 255, 255, 0.3);
-            border-radius: 3px;
+            border-radius: 0;
             transform: translateX(-50%);
             pointer-events: none;
-            border: 1px solid rgba(0, 255, 255, 0.5);
+            border: none;
+            box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.4), inset -1px -1px 2px rgba(0, 0, 0, 0.2);
         }
     </style>
 </head>
@@ -575,14 +564,14 @@
                 const timeline = document.getElementById('timeline');
                 const marker = document.createElement('div');
                 marker.className = 'droplet-marker';
-                marker.style.left = `${(position / this.totalPositions) * 100}%`;
+                marker.style.left = `${((position + 0.5) / this.totalPositions) * 100}%`;
                 timeline.appendChild(marker);
                 
                 // Create basin droplet
                 const droplet = document.createElement('div');
                 droplet.className = 'droplet';
-                droplet.style.left = '50%';
-                droplet.style.top = '50%';
+                droplet.style.left = `${this.basinCenter.x}px`;
+                droplet.style.top = `${this.basinCenter.y}px`;
                 
                 // Generate unique ID for this droplet
                 const dropletId = this.generateDropletId();
@@ -675,7 +664,7 @@
                     
                     // Constrain to basin circle
                     const distance = Math.sqrt(mouseX * mouseX + mouseY * mouseY);
-                    const maxDistance = 228; // Basin radius minus droplet size (240 - 12)
+                    const maxDistance = 232.5; // Basin radius (240) minus droplet radius (7.5)
                     
                     if (distance > maxDistance) {
                         const angle = Math.atan2(mouseY, mouseX);
@@ -714,7 +703,7 @@
 
             makeTimelineMarkerDraggable(marker, dropletData) {
                 let isDragging = false;
-                let startLeft;
+                let startPosition;
                 let handleMouseMove, handleMouseUp;
                 let hasMoved = false;
                 
@@ -729,7 +718,7 @@
                     isDragging = true;
                     hasMoved = false;
                     this.isDraggingMarker = true;
-                    startLeft = parseFloat(marker.style.left);
+                    startPosition = dropletData.position;
                     
                     // Add a temporary overlay to prevent timeline clicks
                     const overlay = document.createElement('div');
@@ -755,11 +744,11 @@
                         const mouseX = e.clientX - rect.left;
                         
                         // Snap to grid positions (0-63) - this creates the "jumping" effect
-                        const gridPosition = Math.round((mouseX / rect.width) * this.totalPositions);
+                        const gridPosition = Math.floor((mouseX / rect.width) * this.totalPositions);
                         const snappedPosition = Math.max(0, Math.min(this.totalPositions - 1, gridPosition));
                         
                         // Update marker position - this will "jump" to grid positions
-                        const snappedLeftPercent = (snappedPosition / this.totalPositions) * 100;
+                        const snappedLeftPercent = ((snappedPosition + 0.5) / this.totalPositions) * 100;
                         marker.style.left = `${snappedLeftPercent}%`;
                         
                         // Update droplet data
@@ -791,7 +780,7 @@
                         this.addToHistory({
                             type: 'moveDroplet',
                             dropletId: dropletData.id,
-                            oldPosition: startLeft
+                            oldPosition: startPosition
                         });
                         
                         // Remove event listeners
@@ -889,7 +878,6 @@
                 this.droplets.forEach(droplet => {
                     if (this.shouldDropletPlay(droplet, position)) {
                         this.playDropletSound(droplet);
-                        this.animateDroplet(droplet);
                         this.createBasinRipple(droplet);
                     }
                 });
@@ -987,13 +975,6 @@
                 noise.stop(now + 0.2);
             }
 
-            animateDroplet(droplet) {
-                droplet.element.classList.add('playing');
-                setTimeout(() => {
-                    droplet.element.classList.remove('playing');
-                }, 500);
-            }
-
             createBasinRipple(dropletData) {
                 const rippleCount = 5;
                 const totalDuration = 1200; // Corresponds to animation-duration in CSS
@@ -1013,7 +994,7 @@
                     ripple.style.animationDelay = `${i * stagger}ms`;
 
                     // Dim the outer ripples to match the sketch
-                    ripple.style.opacity = 1 - (i / rippleCount);
+                    ripple.style.opacity = (1 - (i / rippleCount)) * 0.3;
 
                     this.basin.appendChild(ripple);
 
@@ -1096,7 +1077,7 @@
                     
                     const ghostMarker = document.createElement('div');
                     ghostMarker.className = 'ghost-marker';
-                    ghostMarker.style.left = `${(repeatPosition / this.totalPositions) * 100}%`;
+                    ghostMarker.style.left = `${((repeatPosition + 0.5) / this.totalPositions) * 100}%`;
                     timeline.appendChild(ghostMarker);
                     
                     dropletData.ghostMarkers.push(ghostMarker);
@@ -1173,7 +1154,7 @@
                 const timeline = document.getElementById('timeline');
                 const marker = document.createElement('div');
                 marker.className = 'droplet-marker';
-                marker.style.left = `${(dropletData.position / this.totalPositions) * 100}%`;
+                marker.style.left = `${((dropletData.position + 0.5) / this.totalPositions) * 100}%`;
                 timeline.appendChild(marker);
                 
                 // Recreate basin droplet
@@ -1209,7 +1190,7 @@
                 droplet.position = position;
                 
                 // Update marker position
-                droplet.marker.style.left = `${(position / this.totalPositions) * 100}%`;
+                droplet.marker.style.left = `${((position + 0.5) / this.totalPositions) * 100}%`;
                 
                 // Update ghost markers
                 this.updateGhostMarkers(droplet);

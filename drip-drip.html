@@ -343,7 +343,7 @@
         </div>
         
         <div class="info">
-            Click timeline to place droplets • Drag droplets in the basin to adjust pitch • Center = low, rim = high
+            Click timeline or basin to place droplets • Drag in basin to adjust pitch • Center = low, rim = high
         </div>
 
         <div class="parameter-menu" id="parameterMenu">
@@ -440,7 +440,7 @@
                     
                     // Calculate position with better precision
                     const normalizedX = x / rect.width;
-                    const position = Math.round(normalizedX * this.totalPositions);
+                    const position = Math.floor(normalizedX * this.totalPositions);
                     
                     // Ensure position is within bounds
                     const clampedPosition = Math.max(0, Math.min(position, this.totalPositions - 1));
@@ -452,6 +452,34 @@
             initBasin() {
                 this.basin = document.getElementById('basin');
                 this.basinCenter = { x: 240, y: 240 }; // Half of 480px basin
+
+                this.basin.addEventListener('click', (e) => {
+                    // Don't create a new droplet if clicking on an existing one
+                    if (e.target.classList.contains('droplet')) {
+                        return;
+                    }
+
+                    const rect = this.basin.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const clickY = e.clientY - rect.top;
+
+                    // Coordinates relative to basin center
+                    let x = clickX - this.basinCenter.x;
+                    let y = clickY - this.basinCenter.y;
+
+                    // Constrain to basin circle
+                    const distance = Math.sqrt(x * x + y * y);
+                    const maxDistance = this.basinCenter.x - 7.5; // Basin radius minus droplet radius
+
+                    if (distance > maxDistance) {
+                        const angle = Math.atan2(y, x);
+                        x = Math.cos(angle) * maxDistance;
+                        y = Math.sin(angle) * maxDistance;
+                    }
+
+                    const position = this.isPlaying ? this.currentPosition : 0;
+                    this.addDroplet(position, x, y);
+                });
             }
 
             initControls() {
@@ -559,7 +587,7 @@
                 });
             }
 
-            addDroplet(position) {
+            addDroplet(position, basinX = 0, basinY = 0) {
                 // Create timeline marker
                 const timeline = document.getElementById('timeline');
                 const marker = document.createElement('div');
@@ -570,8 +598,8 @@
                 // Create basin droplet
                 const droplet = document.createElement('div');
                 droplet.className = 'droplet';
-                droplet.style.left = `${this.basinCenter.x}px`;
-                droplet.style.top = `${this.basinCenter.y}px`;
+                droplet.style.left = `${this.basinCenter.x + basinX}px`;
+                droplet.style.top = `${this.basinCenter.y + basinY}px`;
                 
                 // Generate unique ID for this droplet
                 const dropletId = this.generateDropletId();
@@ -583,13 +611,18 @@
                     element: droplet,
                     marker: marker,
                     ghostMarkers: [],
-                    x: 0,
-                    y: 0,
+                    x: basinX,
+                    y: basinY,
                     pitch: 0,
                     velocity: 0.7,
                     repeatPattern: 'none',
                     customRepeat: 4
                 };
+
+                // Calculate pitch based on distance from center
+                const distance = Math.sqrt(basinX * basinX + basinY * basinY);
+                const maxDistance = this.basinCenter.x - 7.5;
+                dropletData.pitch = Math.min(distance / maxDistance, 1);
                 
                 this.droplets.push(dropletData);
                 this.basin.appendChild(droplet);
